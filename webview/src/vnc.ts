@@ -87,11 +87,10 @@ class MessagePassingDataChannel implements DataChannel {
 
   private onMessage(ev: MessageEvent<ServerMessage>): void {
     const message = ev.data;
-    const {type, subtype} = message;
-    if (type !== 'socket') {
+    if (message.type !== 'socket') {
       return;
     }
-    const {socketId} = message;
+    const {subtype, socketId} = message;
     if (socketId !== this.socketId) {
       return;
     }
@@ -144,11 +143,15 @@ function openDataChannel(url: string): DataChannel {
   return new WebSocket(url);
 }
 
+// The active RFB client, created in onReady(). Used to push host clipboard
+// text to the remote VNC server.
+let rfb: RFB | null = null;
+
 function onReady(): void {
   const spinner = document.getElementById('loading')!;
   const container = document.getElementById('main')!;
   const proxyUrl = container.dataset.webSocketProxyUrl!;
-  const rfb = new RFB(container, openDataChannel(proxyUrl));
+  rfb = new RFB(container, openDataChannel(proxyUrl));
   rfb.scaleViewport = true;
   rfb.addEventListener('connect', () => {
     spinner.classList.add('loaded');
@@ -156,6 +159,11 @@ function onReady(): void {
   });
   rfb.addEventListener('disconnect', () => {
     postClientMessage({type: 'event', subtype: 'disconnect'});
+  });
+  // remote -> host clipboard sync
+  rfb.addEventListener('clipboard', ev => {
+    const {text} = (ev as CustomEvent<{text: string}>).detail;
+    postClientMessage({type: 'clipboard', text});
   });
 }
 
@@ -166,8 +174,13 @@ function main(): void {
   });
 
   window.addEventListener('message', (ev: MessageEvent<ServerMessage>) => {
-    const {type, subtype} = ev.data;
-    if (type === 'event' && subtype === 'ready') {
+    const message = ev.data;
+    if (message.type === 'clipboard') {
+      // host -> remote clipboard sync
+      rfb?.clipboardPasteFrom(message.text);
+      return;
+    }
+    if (message.type === 'event' && message.subtype === 'ready') {
       onReady();
     }
   });

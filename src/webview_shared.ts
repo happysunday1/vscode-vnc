@@ -28,6 +28,12 @@ export interface EventDisconnectClientMessage extends EventClientMessageBase {
   subtype: 'disconnect';
 }
 
+// Carries clipboard text from the WebView (remote) to the extension (host).
+export interface ClipboardClientMessage {
+  type: 'clipboard';
+  text: string;
+}
+
 interface SocketClientMessageBase {
   type: 'socket';
   socketId: number;
@@ -54,6 +60,7 @@ export type ClientMessage =
   | EventReadyClientMessage
   | EventConnectClientMessage
   | EventDisconnectClientMessage
+  | ClipboardClientMessage
   | SocketOpenClientMessage
   | SocketDataClientMessage
   | SocketCloseClientMessage;
@@ -65,6 +72,12 @@ interface EventServerMessageBase {
 // Notifies that the VNC server has started and is ready for connections.
 export interface EventReadyServerMessage extends EventServerMessageBase {
   subtype: 'ready';
+}
+
+// Carries clipboard text from the extension (host) to the WebView (remote).
+export interface ClipboardServerMessage {
+  type: 'clipboard';
+  text: string;
 }
 
 interface SocketServerMessageBase {
@@ -97,6 +110,7 @@ export interface SocketCloseServerMessage extends SocketServerMessageBase {
 // All messages that can be sent from server (extension) to client (WebView).
 export type ServerMessage =
   | EventReadyServerMessage
+  | ClipboardServerMessage
   | SocketOpenServerMessage
   | SocketDataServerMessage
   | SocketErrorServerMessage

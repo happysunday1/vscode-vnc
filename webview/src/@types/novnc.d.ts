@@ -32,5 +32,8 @@ declare module '@novnc/novnc/lib/rfb' {
     scaleViewport: boolean;
 
     addEventListener(type: string, listener: EventListener): void;
+
+    // Sends clipboard text to the remote VNC server.
+    clipboardPasteFrom(text: string): void;
   }
 }

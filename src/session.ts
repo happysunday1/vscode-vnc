@@ -59,6 +59,12 @@ export class VncSession implements vscode.Disposable {
     this.onDidReceiveMessageEmitter,
   ];
 
+  // The last clipboard text known to be on the host. Used both to detect
+  // host clipboard changes (VS Code has no clipboard change event, so we
+  // poll) and to avoid echo loops when the remote side sets the host
+  // clipboard.
+  private lastHostClipboardText = '';
+
   constructor(
     hostname: string,
     port: number,
@@ -82,9 +88,37 @@ export class VncSession implements vscode.Disposable {
 
     this.subscriptions.push(
       this.panel.webview.onDidReceiveMessage((message: ClientMessage) => {
+        if (message.type === 'clipboard') {
+          // remote -> host clipboard sync
+          this.lastHostClipboardText = message.text;
+          void vscode.env.clipboard.writeText(message.text);
+          return;
+        }
         this.onDidReceiveMessageEmitter.fire(message);
       })
     );
+
+    // host -> remote clipboard sync.
+    // VS Code exposes no clipboard change event, so poll the host clipboard
+    // and push changes to the WebView.
+    const clipboardPoller = setInterval(() => {
+      if (this.canceller.token.isCancellationRequested) {
+        return;
+      }
+      void vscode.env.clipboard.readText().then(text => {
+        if (text === this.lastHostClipboardText) {
+          return;
+        }
+        this.lastHostClipboardText = text;
+        void postServerMessage(this.panel.webview, {
+          type: 'clipboard',
+          text,
+        });
+      });
+    }, 500);
+    this.subscriptions.push({
+      dispose: () => clearInterval(clipboardPoller),
+    });
 
     // Dispose the session when the panel is closed.
     this.subscriptions.push(
@@ -136,8 +170,7 @@ export class VncSession implements vscode.Disposable {
     return new Promise(resolve => {
       const subscription = webview.onDidReceiveMessage(
         (message: ClientMessage) => {
-          const {type, subtype} = message;
-          if (type === 'event' && subtype === 'ready') {
+          if (message.type === 'event' && message.subtype === 'ready') {
             subscription.dispose();
             resolve();
           }
